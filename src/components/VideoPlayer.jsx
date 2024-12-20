@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { categories } from '../data/categories';
 
@@ -6,34 +6,96 @@ function VideoPlayer() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [isCompleted, setIsCompleted] = useState(false);
+  const [currentVideo, setCurrentVideo] = useState(null);
+  const [currentCategory, setCurrentCategory] = useState(null);
 
-  // Find the video across all categories
-  let currentVideo;
-  let currentCategory;
+  useEffect(() => {
+    // Find the video and category
+    let foundVideo;
+    let foundCategory;
 
-  categories.forEach((category) => {
-    const video = category.videos.find((v) => v.id === id);
-    if (video) {
-      currentVideo = video;
-      currentCategory = category;
+    categories.forEach((category) => {
+      const video = category.videos.find((v) => v.id === id);
+      if (video) {
+        foundVideo = video;
+        foundCategory = category;
+      }
+    });
+
+    if (foundVideo && foundCategory) {
+      setCurrentVideo(foundVideo);
+      setCurrentCategory(foundCategory);
+      
+      // Fetch progress from server
+      fetchProgress(foundCategory.id);
     }
-  });
+  }, [id]);
 
-  if (!currentVideo) return <div>Video not found</div>;
+  const fetchProgress = async (categoryId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/progress/${categoryId}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Update video completion status based on server data
+        if (currentVideo) {
+          if (currentVideo.id.startsWith('qms-')) {
+            setIsCompleted(data.video1);
+            currentVideo.completed = data.video1;
+          } else if (currentVideo.id.startsWith('env-')) {
+            setIsCompleted(data.video2);
+            currentVideo.completed = data.video2;
+          } else if (currentVideo.id.startsWith('cert-')) {
+            setIsCompleted(data.video3);
+            currentVideo.completed = data.video3;
+          }
+        }
+        // Update category progress
+        if (currentCategory) {
+          currentCategory.progress = data.progress;
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching progress:', error);
+    }
+  };
 
-  const handleCompletion = () => {
+  const handleCompletion = async () => {
     setIsCompleted(true);
     currentVideo.completed = true;
 
-    // Update category progress
-    const completedVideos = currentCategory.videos.filter((v) => v.completed).length;
-    currentCategory.progress = Math.round((completedVideos / currentCategory.videos.length) * 100);
+    try {
+      const response = await fetch('http://localhost:5000/api/progress/updateProgress', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          categoryId: currentCategory.id.toString(),
+          videoId: currentVideo.id,
+          completed: true
+        })
+      });
 
-    // Show completion message and redirect after delay
-    setTimeout(() => {
-      navigate(`/category/${currentCategory.id}`);
-    }, 2000);
+      if (!response.ok) {
+        throw new Error('Failed to update progress');
+      }
+
+      const data = await response.json();
+      console.log('Progress updated:', data);
+
+      // Update category progress
+      currentCategory.progress = data.progress;
+
+      // Show completion message and redirect after delay
+      setTimeout(() => {
+        navigate(`/category/${currentCategory.id}`);
+      }, 2000);
+    } catch (error) {
+      console.error('Error updating progress:', error);
+    }
   };
+
+  if (!currentVideo) return <div>Video not found</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -57,7 +119,7 @@ function VideoPlayer() {
               {isCompleted ? 'Completed!' : 'Mark as Complete'}
             </button>
 
-            <div className="text-sm text-gray-500">Part of: {currentCategory.title}</div>
+            <div className="text-sm text-gray-500">Part of: {currentCategory?.title}</div>
           </div>
         </div>
       </div>

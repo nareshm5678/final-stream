@@ -8,7 +8,7 @@ import { CategoryCard } from './ui/CategoryCard';
 function Dashboard() {
   const calculateOverallProgress = () => {
     const totalProgress = categories.reduce((acc, cat) => acc + cat.progress, 0);
-    return Math.round((totalProgress / categories.length) * 100);
+    return Math.round((totalProgress / categories.length));
   };
 
   return (
